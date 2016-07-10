@@ -157,8 +157,16 @@ rect.internalAngles;
 square.internalAngles;
 ```
 
-The `rect` can access `internalAngles`, but `square` cannot. Why? The
-answer is the `prototype` attribute.
+Here, we've added a new property, `internalAngles`, to
+`Rectangle.prototype`. This means that everything created from the
+prototypal `Rectangle` will also have acces to this new property, even
+though it was added after the fact. This is done through *delegation*,
+which we'll explore in the next section.
+
+So `rect` can access `internalAngles`, but `square` cannot. Why? Because
+`square` wasn't created with the `Rectangle.prototype`.
+
+Why does that matter? What exactly *is* a prototype, and why is it important?
 
 ### Prototypes
 
@@ -236,22 +244,11 @@ the `Rectangle` prototype, and `square` is not.
 They were both created from the `Rectangle` constructor though. What
 gives?
 
-### Problems With Constructor Functions and new
+### Constructors Aren't Enough
 
-Using constructor functions with the `new` keyword is really just a way
-to force a class-based OOP paradigm onto the prototypal nature of
-JavsScript, obscuring, and sometimes interfering with, the benefits of
-using JavaScript in a purely prototypal way.
-
-One of the problems with the constructor function pattern is that it
-requires the use of `new` to work properly. If you forget the `new`,
-things will go very wrong when you try to use your objects. We use the
-convention of capitalizing the first letter of the function, but that's
-not foolproof.
-
-However, the even bigger problem with constructor functions and `new`
-shows up when we try to inherit from another object and take advantage
-of the delegation features in the prototype system.
+Using constructor functions with the `new` keyword is a handy way to
+create objects, but it can cause problems by obscuring, and sometimes interfering with, the benefits of
+using JavaScript in a purely prototypal way. This is most obvious when we try to inherit from another object and take advantage of the delegation features in the prototype system.
 
 When an object is created, its prototype is set to the
 object it was created from. In the case of a new object created with the
@@ -298,165 +295,328 @@ square.internalAngles;
 ```
 
 Even though we call the `Rectangle` constructor function inside the
-`Square` constructor function, the function that actually *creates*
+`Square` constructor function, the function call that actually *creates*
 `square` is `new Square()`, so the prototype for the square is
 `Square.prototype`, meaning that we haven't inherited from
-`Rectangle` at all, we've just borrowed its constructor function to make our own
+`Rectangle` at all. All we've done is *borrowed* its constructor function to make our own
 object, and made copies of its properties and methods, but haven't taken
 advantage of prototyping.
 
-### Object.create()
+### Assigning Prototypes With Object.create()
 
-Fortunately, we have `Object.create()` to rescue us from these problems
-with `new`. Rather than try to force class-style inheritance with `new`,
-we'll use the pure object-to-object prototype system that JavaScript is
-built on.
+In order to create a `Square` that truly inherits from `Rectangle` and takes advantage of JavaScript's prototype system, we'll need to make a few changes to how we put our objects together.
 
-In order to create a `Square` that truly inherits from `Rectangle`, we'll need
-to make a few changes to how we put our objects together.
-
-We need to convert our constructor function to a simple object
-definition, creating the "prototype" for all rectangles to come:
+A common pattern for defining objects is to combine the use of a
+constructor function for simple initialization values, and to directly
+add functions to the object's `prototype`, like this:
 
 ```js
-var rectangle = {
-  sides: 4,
-  width: 5,
-  height: 7,
-  area: function() {
-  	return this.width * this.height;
-  },
-  perimeter: function () {
-  	return (this.width + this.height) * 2;
-  }
+function Rectangle(sides, width, height) {
+  this.sides = sides;
+  this.width = width;
+  this.height = height;
+}
+Rectangle.prototype.area = function() {
+  return this.width * this.height;
+}
+Rectangle.prototype.perimeter = function () {
+  return (this.width + this.height) * 2;
 }
 ```
 
-We have created a perfectly functional `rectangle` object, and not only
-can we use it, but we can use it to create other rectangle-like objects.
-Let's try a few things:
+Now, when we want to instantiate a rectangle object, we can do the following:
 
 ```js
-var rect = Object.create(rectangle);
+var rect = new Rectangle(4, 3, 2);
+```
 
-console.log(rect);
-// empty Object {}
+And everything works as expected. But what if we are creating a system
+that represents a cartesian plane, and every shape on the plan needs an
+(x,y) coordinate position?
+
+We could add those values to our `Rectangle` definition, but we also
+know we'll be creating other shapes on the plane as well, like triangles and trapezoids and dodecahedrons, oh my!
+
+Since a rectangle *is-a* shape, a triangle *is-a* shape, and a trapezoid
+*is-a* shape, it stands to reason that we should be inheriting from a
+`Shape` base object. Shapes also have a number of sides, so there's no
+need for `Rectangle` to be in charge of that.
+
+```js
+function Shape(sides, x, y) {
+  this.sides = sides;
+  this.x = x;
+  this.y = y;
+}
+```
+
+Now we can let our `Rectangle` inherit from `Shape` by using
+`Object.create` with the `Shape` prototype:
+
+```js
+function Rectangle(x, y, width, height) {
+  //call superclass constructor
+  Shape.call(this, 4, x, y);
+  //set rectangle values
+  this.width = width;
+  this.height = height;
+}
+// set Rectangle prototype to an instance of a Shape
+Rectangle.prototype = Object.create(Shape.prototype);
+// set Rectangle constructor
+Rectangle.prototype.constructor = Rectangle
+
+// extend with Rectangle behavior
+Rectangle.prototype.area = function() {
+  return this.width * this.height;
+}
+Rectangle.prototype.perimeter = function () {
+  return (this.width + this.height) * 2;
+}
+```
+
+What we've done here is defined our `Rectangle` constructor to use our
+`Shape` constructor, similar to how we did it earlier with `Square`,
+then added the `Rectangle` specific properties.
+
+The key difference is that we are explicitly setting the
+`Rectangle.prototype` to a `Shape.prototype` using
+`Object.create`. This allows us assign a prototype to an object when we
+create it, rather than letting it be assigned for us via the
+constructor function.
+
+We also need to set `Rectangle.prototype.constructor` to the proper
+function, so that it knows to create a `Rectangle` and not a `Shape`.
+
+Finally, we want to *extend* `Rectangle` to add behavior that isn't a
+part of `Shape`. We do that the same way as before, adding new functions
+directly to `Rectangle.prototype`, however, we do it after everything
+else. Setting `Rectangle.prototype = Object.create(Shape.prototype)`
+overwrites the default `Rectangle` prototype, so we have to do that
+first, and then extend our subclass afterward, or else we'll overwrite
+our extended behavior.
+
+Let's create a new `Rectangle` object and examine some things.
+
+```js
+var rect = new Rectangle(1,0,5,3)
+var shape = new Shape(3,2,2)
 
 console.log(rect.sides);
 // 4
+console.log(shape.sides);
+// 3
 
-console.log(rect.__proto__);
-/* rectangle { sides: 4, width: 5, height: 7,
-              area: [Function: area],
-              perimeter: [Function: perimeter] }
-*/
+console.log(rect.width);
+// 5
+console.log(shape.width);
+// undefined
 
-rectangle.isPrototypeOf(rect);
-// true
+console.log(rect.area());
+// 15
+console.log(shape.area());
+// TypeError - no function
+
+console.log(rect instanceof Shape);
+//true
+console.log(shape instanceof Rectangle);
+//false
 ```
 
 Let's examine each of these statements and what's happening.
 
-First we create a new object called `rect` with
-`Object.create(rectangle)`. JavaScript is giving us an instance of a new
-object whose prototype is `rectangle`. This new `rect` object is not,
-itself, a `rectangle`. It is created from the `rectangle` prototype, or
-we can say it inherits from `rectangle`.
+First we create a new `Rectangle` and `Shape` objects with their
+respective constructors.
 
-To illustrate the difference, if we `console.log(rect)`, we see that
-it's an empty object. Just the `{}` object literal.
+If we try to access `rect.sides`, we get `4`. We know that `sides` is
+definied by `Shape`, so it looks like our constructor worked so far and
+our `Rectangle` inherited the properties of `Shape`.
 
-However, if we try to access `rect.sides`, we get `4`, which is the
-value for `rectangle.sides`. Why? Because, as learned earlier,
-JavaScript makes use of the prototype to *delegate* property and
-function calls up the prototype chain. Here, when we call `rect.sides`,
-JavaScript first looks for a property called `sides` in `rect`. But
-`rect` is an empty object, so it looks at the prototype for `rect`, in
-this case `rectangle`. It finds a `sides` property on `rectangle` and
-returns that value.
+When we try to call `width` on both objects, `rect` gives us `5`, but
+`shape` doesn't have access to `width`. This makes sense, because
+`Shape` doesn't have `width`, but `Rectangle` does. This is one of our
+extended properties.
 
-We can see this prototype chain by accessing `rect.__proto__` and
-examining the results, which is our `rectangle` and all its values.
-Every object has a `__proto__` property, and that's how JavaScript knows
-where to go next to look for things. If it didn't find `size` in
-`rect.__proto__` it would have looked in `rect.__proto__.__proto__` and
-so on until it reached the end of the inheritance chain at
-`Object.prototype`.
+Similarly, we see that `rect` has `area` and `shape` does not, which
+also makes sense, because `area` is one of the functions we added to the
+`Rectangle` prototype after inheriting from `Shape`.
 
-Finally, we can prove that `rectangle` is the prototype for `rect` by
-calling `rectangle.isPrototypeOf(rect)`.
+Finally, we can prove that `rectangle` is constructed from `Shape` by
+checking if `rect instanceof Shape` returns true. The opposite case is
+false, because `shape` was not constructed from `Rectangle`.
 
-If we set a property on `rect`, what happens?
+If we extend the behavior of the `Shape` prototype, what happens? Let's
+add a `move` function and a `position` function.
 
 ```js
-rect.width = 2;
-console.log(rect);
-// {width: 2}
-console.log(rectangle);
-/*  { sides: 4, width: 5, height: 7,
-      area: [Function: area],
-      perimeter: [Function: perimeter] }
-*/
+Shape.prototype.move = function(x,y) {
+  this.x = x;
+  this.y = y;
+}
+
+Shape.prototype.position = function() {
+  return(this.x + ", " + this.y);
+}
 ```
 
-We already know that you can add properties to an object at runtime by
-just setting them, so here we're adding the property `width` to our
-`rect` oject, which means when we try to access it, JavaScript will find
-it on `rect` and will no longer have to access `__proto__`, effectively
-overriding the property for our `rect` object.
+Now, without doing anything, we can use both these functions on our
+existing `rect` and `shape` instances.
+
+```js
+rect.move(8,9);
+rect.position();
+// 8, 9
+
+shape.move(2,3);
+shape.position();
+// 2, 3
+```
+
+This is the magic of delegation when we inherit with prototypes!
+
+#### hasOwnProperty()
+
+To see this prototypal delegation in action, let's look at the
+properties of our `rect` instance. We can iterate over them like this:
+
+```js
+for (var prop in rect) {
+  console.log("rect." + prop + " = " + rect[prop]);
+}
+```
+
+This gives us a lot of information and looks a little like this:
+
+```js
+rect.sides = 4
+rect.x = 4
+rect.y = 3
+rect.width = 5
+rect.height = 3
+rect.constructor = function Rectangle(x, y, width, height) {
+  //call superclass constructor
+  Shape.call(this, 4, x, y);
+  //set rectangle values
+  this.width = width;
+  this.height = height;
+}
+rect.area = function () {
+  return this.width * this.height;
+}
+rect.perimeter = function () {
+  return (this.width + this.height) * 2;
+}
+rect.move = function (x,y) {
+  this.x = x;
+  this.y = y;
+  }
+rect.position = function () {
+  return(this.x + ", " + this.y);
+}
+```
+
+But we know that we didn't define `position` and `move` on `Rectangle`.
+And `area` and `perimeter` are actually defined on the `Rectangle`
+prototype. And what is that `constructor` doing in there?
+
+If we iterate over all the properties of `rect` in this way, it includes
+everything directly available on `rect`, as well as everything that can
+be found all the way up the prototype chain.
+
+We can use `hasOwnProperty()` to filter this output to only the
+properties directly available on `rect`, like this:
+
+```js
+for (var prop in rect) {
+  if(rect.hasOwnProperty(prop)) {
+    console.log("rect." + prop + " = " + rect[prop]);
+  }
+}
+```
+
+This way, we can tell if a property was directly set on our instance, or
+if we're inheriting it from somewhere else.
+
+### Extending the Inheritance Chain
 
 A rectangle is really just a special quadrilateral, right? Let's build out this example a little more and see some inheritance in action.
 
 ```js
-var quadrilateral = {
-  sides: 4,
-  sideOneLength: 1,
-  sideTwoLength: 2,
-  sideThreeLength: 1,
-  sideFourLength: 2,
-  perimeter: function() {
-    return this.sideOneLength + this.sideTwoLength + this.sideThreeLength + this.sideFourLength;
-  },
-  setSides: function(s1, s2, s3, s4) {
-    this.sideOneLength = s1;
-    this.sideTwoLength = s2;
-    this.sideThreeLength = s3;
-    this.sideFourLength = s4;
-  }
+function Shape(sides, x, y) {
+  this.sides = sides;
+  this.x = x;
+  this.y = y;
 }
 
-var rectangle = Object.create(quadrilateral);
-rectangle.width = function() {
-  return this.sideOneLength;
-}
-rectangle.height = function() {
-  return this.sideTwoLength;
-}
-rectangle.setWidth = function(width) {
-  this.sideOneLength = width;
-  this.sideThreeLength = width;
-}
-rectangle.setHeight = function(height) {
-  this.sideTwoLength = height;
-  this.sideFourLength = height;
-}
-rectangle.area = function() {
-  return this.width() * this.height();
+function Quadrilateral(x, y, sideOneLength, sideTwoLength, sideThreeLength, sideFourLength) {
+  // call Shape constructor
+  Shape.call(4, x, y);
+  this.sideOneLength = sideOneLength;
+  this.sideTwoLength = sideTwoLength;
+  this.sideThreeLength = sideThreeLength;
+  this.sideFourLength = sideFourLength;
 }
 
-var square = Object.create(rectangle);
-square.setSideLength = function(l) {
-  this.setWidth(l);
-  this.setHeight(l);
+//inherit from Shape prototype
+Quadrilateral.prototype = Object.create(Shape.prototype);
+Quadrilateral.prototype.constructor = Quadrilateral;
+
+//extend Quadrilateral
+Quadrilateral.prototype.perimeter = function() {
+  return this.sideOneLength + this.sideTwoLength + this.sideThreeLength + this.sideFourLength;
 }
 
-square.setSideLength(4);
+function Rectangle(x, y, width, height) {
+  //call Quadrilateral constructor
+  Quadrilateral.call(this,x, y, width, height, width, height);
+  //set rectangle values
+  this.width = width;
+  this.height = height;
+}
+// set Rectangle prototype to an instance of a Shape
+Rectangle.prototype = Object.create(Quadrilateral.prototype);
+// set Rectangle constructor
+Rectangle.prototype.constructor = Rectangle
+
+// extend with Rectangle behavior
+Rectangle.prototype.area = function() {
+  return this.width * this.height;
+}
+
+function Square(x, y, length) {
+  //call Rectangle constructor
+  Rectangle.call(this, x, y, length, length)
+  this.length = length;
+}
+
+Square.prototype = Object.create(Rectangle.prototype);
+Square.prototype.constructor = Square
+
+var square = new Square(1,1,3);
+square.length;
+// 3 - defined on Square
+
+square.width;
+// 3 - inherited from Rectangle
+
+square.sideOneLength;
+// 3 - inherited from Quadrilateral through Rectangle
+
+square.position();
+// 1,1 - from Shape
+
+square.move(2,3); // from Shape
+square.position();
+// 2,3
+
 square.area();
+// 9 - from Rectangle
 square.perimeter();
+// 12 - from Quadrilateral
 ```
 
 Now we have a base `quadrilateral` that we can use to build a
-`rectangle`. We'll extend the rectangle to have functions to determine
+`rectangle`. We'll extend the rectangle to have properties to determine
 more rectangular-specific things, like `width`, `height`, and `area`. It
 wouldn't make sense to define `area()` at the `quadrilateral` level,
 because it's a different formula depending on the shape. So we do that
@@ -470,141 +630,15 @@ everything from the `rectangle` prototype, and just extend it to
 specifically set one side-length value instead of a `width` and
 `height`.
 
+We could extend this further, inserting a `Polygon` into the chain
+between `Shape` and `Quadrilateral`, and creating a `Triangle` that
+inherits from `Polygon`, and subclasses for `RightTriangle` and
+`EquilateralTriangle` and `IsocelesTriangle`, all of which define their
+own rules for side lengths and internal angles.
+
 This is the basic pattern of an inheritance chain. A parent object is
 more general than a child, which takes attributes from the parent and
 adds more specific attributes of its own.
-
-## hasOwnProperty()
-
-One interesting challenge with objects and inheritance is that we
-sometimes need to determine exactly what properties and methods are
-available on an object, and whether or not they are defined on the
-object itself or delegated to a prototype. Let's look at our `square`
-from the last example, which was created from the `rectangle` prototype,
-which was created from the `quadrilateral` prototype.
-
-```js
-var quadrilateral = {
-  sides: 4,
-  sideOneLength: 1,
-  sideTwoLength: 2,
-  sideThreeLength: 1,
-  sideFourLength: 2,
-  perimeter: function() {
-    return this.sideOneLength + this.sideTwoLength + this.sideThreeLength + this.sideFourLength;
-  },
-  setSides: function(s1, s2, s3, s4) {
-    this.sideOneLength = s1;
-    this.sideTwoLength = s2;
-    this.sideThreeLength = s3;
-    this.sideFourLength = s4;
-  }
-}
-
-var rectangle = Object.create(quadrilateral);
-rectangle.width = function() {
-  return this.sideOneLength;
-}
-rectangle.height = function() {
-  return this.sideTwoLength;
-}
-rectangle.setWidth = function(width) {
-  this.sideOneLength = width;
-  this.sideThreeLength = width;
-}
-rectangle.setHeight = function(height) {
-  this.sideTwoLength = height;
-  this.sideFourLength = height;
-}
-rectangle.area = function() {
-  return this.width() * this.height();
-}
-
-var square = Object.create(rectangle);
-square.setSideLength = function(l) {
-  this.length = l;
-  this.setWidth(l);
-  this.setHeight(l);
-}
-```
-
-We can look at each property available to `square` by iterating over
-them with `for...in`:
-
-```js
-for (var prop in square) {
-  console.log("square." + prop + " = " + square[prop]);
-}
-```
-
-Whoa! That outputs everything from `quadrilateral` through `rectangle`
-and then to `square`! That's a lot. What if we just want to see if
-something came from `square` and isn't delegated to a prototype?
-
-We can use `hasOwnProperty()` for just this. We can check that
-`setSideLength` comes from `square` like this:
-
-```js
-square.hasOwnProperty("setSideLength");
-//true
-```
-
-This tells us that `setSideLength` was defined on `square` and isn't
-going to be delegated to the prototype. What about `width()`?
-
-```js
-square.hasOwnProperty("width");
-//false
-
-rectangle.hasOwnProperty("width");
-//true
-```
-
-Even though we can call `square.width()`, it's not defined by `square`,
-it's defined by `rectangle`.
-
-Why is this important? Consider the `square` implementation again:
-
-```js
-var square = Object.create(rectangle);
-square.setSideLength = function(l) {
-  this.length = l;
-  this.setWidth(l);
-  this.setHeight(l);
-}
-```
-
-Here, if we call `square.setSideLength`, we'll not only call `setWidth`
-and `setHeight`, but we'll also set a property called `length` on our
-square. Before we call this function, let's check to see if `square` has
-a `length` property:
-
-```js
-square.hasOwnProperty("length");
-///false
-```
-
-Now we know that `length` has never been set on our square, meaning our
-side-lengths are coming from who-knows-where up the prototype chain! But
-once we call `setSideLength`, it will set that property, and we can
-verify that our particular square has a length:
-
-```js
-square.hasOwnProperty("length");
-///false
-square.setSideLength(12);
-square.hasOwnProperty("length");
-//true
-```
-
-Now we know for sure that this instance of `square` has its own
-`length`, and isn't delegating it to someone else, potentially causing
-bugs.
-
-**Top-tip:** You might think it's enough to check if `square.length ===
-undefined` but all that tells us is whether or not `square.length`
-evaluates to `undefined`, which could be true regardless of if `length`
-exists as a property of `square`.
 
 ## Summary
 
