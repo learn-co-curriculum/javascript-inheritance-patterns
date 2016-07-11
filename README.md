@@ -568,7 +568,7 @@ Quadrilateral.prototype.perimeter = function() {
 
 function Rectangle(x, y, width, height) {
   //call Quadrilateral constructor
-  Quadrilateral.call(this,x, y, width, height, width, height);
+  Quadrilateral.call(this, x, y, width, height, width, height);
   //set rectangle values
   this.width = width;
   this.height = height;
