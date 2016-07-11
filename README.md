@@ -550,7 +550,7 @@ function Shape(sides, x, y) {
 
 function Quadrilateral(x, y, sideOneLength, sideTwoLength, sideThreeLength, sideFourLength) {
   // call Shape constructor
-  Shape.call(4, x, y);
+  Shape.call(this, 4, x, y);
   this.sideOneLength = sideOneLength;
   this.sideTwoLength = sideTwoLength;
   this.sideThreeLength = sideThreeLength;
