@@ -548,6 +548,15 @@ function Shape(sides, x, y) {
   this.y = y;
 }
 
+Shape.prototype.move = function(x,y) {
+  this.x = x;
+  this.y = y;
+}
+ 
+Shape.prototype.position = function() {
+  return(this.x + ", " + this.y);
+}
+
 function Quadrilateral(x, y, sideOneLength, sideTwoLength, sideThreeLength, sideFourLength) {
   // call Shape constructor
   Shape.call(this, 4, x, y);
